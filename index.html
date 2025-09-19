@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mermaid Diagram</title>
+  <!-- Mermaid script from CDN -->
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true });
+  </script>
+</head>
+<body>
+  <!-- Mermaid diagram -->
+  <div class="mermaid">
+    sequenceDiagram
+    participant User
+    participant BankApp as Bank App/Web
+    participant Agent as AI Agent
+    participant MCP as Bank MCP Server<br/>(TPP + ASPSP)
+    participant SCA as SCA Service<br/>(Bank's Auth)
+    participant Core as Core Banking
+    participant PSP as Payment Network
+
+    Note over User, Agent: 1. MANDATE SETUP WITH SCA (Like VRP Consent)
+    
+    User->>Agent: "Buy groceries weekly under €200"
+    Agent->>MCP: Request mandate template
+    MCP-->>Agent: VRP-style mandate template
+    Agent->>Agent: Prepare Intent Mandate:<br/>- Max amount: €200<br/>- Frequency: Weekly<br/>- Categories: Grocery<br/>- Valid until: 90 days
+    
+    Note over User, SCA: 2. SCA-AUTHENTICATED MANDATE SIGNING
+    
+    Agent->>BankApp: Redirect for mandate authorization
+    BankApp->>User: Display mandate details<br/>(Like VRP consent screen)
+    User->>BankApp: Approve mandate parameters
+    
+    BankApp->>SCA: Initiate SCA
+    SCA->>User: SCA Challenge<br/>(biometric/PIN/OTP)
+    User->>SCA: Complete SCA
+    SCA->>SCA: Generate SCA proof
+    
+    BankApp->>BankApp: Sign mandate with:<br/>1. User's key (hardware-backed)<br/>2. SCA proof embedded<br/>3. Dynamic linking code
+    BankApp->>MCP: Register SCA-signed mandate
+    
+    MCP->>MCP: Validate:<br/>- SCA proof valid<br/>- Dynamic linking intact<br/>- Parameters within limits
+    MCP->>Core: Create VRP consent record
+    Core-->>MCP: Consent ID: VRP-123
+    MCP-->>Agent: Mandate active with ID<br/>(Contains embedded SCA proof)
+
+    Note over Agent, PSP: 3. PAYMENT EXECUTION (No Additional SCA Needed)
+    
+    loop Weekly Shopping
+        Agent->>Agent: Generate Cart Mandate<br/>(€85 at Grocery Store)
+        Agent->>MCP: Execute payment<br/>+ Intent Mandate (with SCA proof)<br/>+ Cart Mandate
+        
+        MCP->>MCP: Validate:<br/>1. SCA proof in Intent Mandate<br/>2. Cart within parameters<br/>3. Frequency limits OK
+        
+        alt Payment within VRP parameters
+            MCP->>Core: Process as VRP payment<br/>(SCA exemption applies)
+            Core->>PSP: Authorize payment<br/>+ VRP indicator
+            PSP-->>Core: Payment approved
+            Core-->>MCP: Success
+            MCP-->>Agent: Payment complete
+        else Parameters exceeded
+            MCP-->>Agent: Parameters exceeded<br/>New SCA required
+            Agent->>User: Request new mandate
+        end
+    end
+
+    Note over User, MCP: 4. MANDATE MANAGEMENT (VRP-Style)
+    
+    alt User Revocation
+        User->>BankApp: View active mandates
+        BankApp->>MCP: Get mandate list
+        MCP-->>BankApp: Active mandates (like VRP dashboard)
+        User->>BankApp: Revoke mandate
+        BankApp->>SCA: Confirm revocation (simplified SCA)
+        User->>SCA: Confirm
+        BankApp->>MCP: Revoke mandate VRP-123
+        MCP->>Core: Cancel VRP consent
+        MCP->>Agent: Mandate revoked notification
+    else 90-day renewal (PSD2 requirement)
+        MCP->>Agent: Mandate expiring soon
+        Agent->>User: Request renewal
+        User->>BankApp: Renew with SCA
+        Note over User, SCA: Repeat SCA signing process
+    end
+  </div>
+</body>
+</html>
